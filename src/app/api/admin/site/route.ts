@@ -44,6 +44,12 @@ export async function POST(request: NextRequest) {
       EnableComments,
       CustomAdFilterCode,
       CustomAdFilterVersion,
+      EnableRegistration,
+      RegistrationRequireTurnstile,
+      LoginRequireTurnstile,
+      TurnstileSiteKey,
+      TurnstileSecretKey,
+      DefaultUserTags,
     } = body as {
       SiteName: string;
       Announcement: string;
@@ -60,6 +66,12 @@ export async function POST(request: NextRequest) {
       EnableComments: boolean;
       CustomAdFilterCode?: string;
       CustomAdFilterVersion?: number;
+      EnableRegistration?: boolean;
+      RegistrationRequireTurnstile?: boolean;
+      LoginRequireTurnstile?: boolean;
+      TurnstileSiteKey?: string;
+      TurnstileSecretKey?: string;
+      DefaultUserTags?: string[];
     };
 
     // 参数校验
@@ -78,7 +90,13 @@ export async function POST(request: NextRequest) {
       typeof DanmakuApiToken !== 'string' ||
       typeof EnableComments !== 'boolean' ||
       (CustomAdFilterCode !== undefined && typeof CustomAdFilterCode !== 'string') ||
-      (CustomAdFilterVersion !== undefined && typeof CustomAdFilterVersion !== 'number')
+      (CustomAdFilterVersion !== undefined && typeof CustomAdFilterVersion !== 'number') ||
+      (EnableRegistration !== undefined && typeof EnableRegistration !== 'boolean') ||
+      (RegistrationRequireTurnstile !== undefined && typeof RegistrationRequireTurnstile !== 'boolean') ||
+      (LoginRequireTurnstile !== undefined && typeof LoginRequireTurnstile !== 'boolean') ||
+      (TurnstileSiteKey !== undefined && typeof TurnstileSiteKey !== 'string') ||
+      (TurnstileSecretKey !== undefined && typeof TurnstileSecretKey !== 'string') ||
+      (DefaultUserTags !== undefined && !Array.isArray(DefaultUserTags))
     ) {
       return NextResponse.json({ error: '参数格式错误' }, { status: 400 });
     }
@@ -113,6 +131,12 @@ export async function POST(request: NextRequest) {
       EnableComments,
       CustomAdFilterCode,
       CustomAdFilterVersion,
+      EnableRegistration,
+      RegistrationRequireTurnstile,
+      LoginRequireTurnstile,
+      TurnstileSiteKey,
+      TurnstileSecretKey,
+      DefaultUserTags,
     };
 
     // 写入数据库

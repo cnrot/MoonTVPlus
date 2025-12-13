@@ -24,6 +24,13 @@ export interface AdminConfig {
     // 自定义去广告代码
     CustomAdFilterCode?: string;
     CustomAdFilterVersion?: number; // 代码版本号（时间戳）
+    // 注册相关配置
+    EnableRegistration?: boolean; // 开启注册
+    RegistrationRequireTurnstile?: boolean; // 注册启用Cloudflare Turnstile
+    LoginRequireTurnstile?: boolean; // 登录启用Cloudflare Turnstile
+    TurnstileSiteKey?: string; // Cloudflare Turnstile Site Key
+    TurnstileSecretKey?: string; // Cloudflare Turnstile Secret Key
+    DefaultUserTags?: string[]; // 新注册用户的默认用户组
   };
   UserConfig: {
     Users: {

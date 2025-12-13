@@ -37,6 +37,10 @@ export async function GET(request: NextRequest) {
     StorageType: storageType,
     Version: CURRENT_VERSION,
     WatchRoom: watchRoomConfig,
+    EnableRegistration: config.SiteConfig.EnableRegistration || false,
+    RegistrationRequireTurnstile: config.SiteConfig.RegistrationRequireTurnstile || false,
+    LoginRequireTurnstile: config.SiteConfig.LoginRequireTurnstile || false,
+    TurnstileSiteKey: config.SiteConfig.TurnstileSiteKey || '',
   };
   return NextResponse.json(result);
 }

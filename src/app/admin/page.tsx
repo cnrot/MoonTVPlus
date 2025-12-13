@@ -297,6 +297,12 @@ interface SiteConfig {
   DanmakuApiBase: string;
   DanmakuApiToken: string;
   EnableComments: boolean;
+  EnableRegistration?: boolean;
+  RegistrationRequireTurnstile?: boolean;
+  LoginRequireTurnstile?: boolean;
+  TurnstileSiteKey?: string;
+  TurnstileSecretKey?: string;
+  DefaultUserTags?: string[];
 }
 
 // 视频源数据类型
@@ -4577,6 +4583,12 @@ const SiteConfigComponent = ({
     DanmakuApiBase: 'http://localhost:9321',
     DanmakuApiToken: '87654321',
     EnableComments: false,
+    EnableRegistration: false,
+    RegistrationRequireTurnstile: false,
+    LoginRequireTurnstile: false,
+    TurnstileSiteKey: '',
+    TurnstileSecretKey: '',
+    DefaultUserTags: [],
   });
 
   // 豆瓣数据源相关状态
@@ -4644,6 +4656,12 @@ const SiteConfigComponent = ({
           config.SiteConfig.DanmakuApiBase || 'http://localhost:9321',
         DanmakuApiToken: config.SiteConfig.DanmakuApiToken || '87654321',
         EnableComments: config.SiteConfig.EnableComments || false,
+        EnableRegistration: config.SiteConfig.EnableRegistration || false,
+        RegistrationRequireTurnstile: config.SiteConfig.RegistrationRequireTurnstile || false,
+        LoginRequireTurnstile: config.SiteConfig.LoginRequireTurnstile || false,
+        TurnstileSiteKey: config.SiteConfig.TurnstileSiteKey || '',
+        TurnstileSecretKey: config.SiteConfig.TurnstileSecretKey || '',
+        DefaultUserTags: config.SiteConfig.DefaultUserTags || [],
       });
     }
   }, [config]);
@@ -5200,6 +5218,196 @@ const SiteConfigComponent = ({
           </div>
           <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
             开启后将显示豆瓣评论。评论为逆向抓取，请自行承担责任。
+          </p>
+        </div>
+      </div>
+
+      {/* 注册相关配置 */}
+      <div className='space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700'>
+        <h3 className='text-sm font-semibold text-gray-900 dark:text-gray-100'>
+          注册配置
+        </h3>
+
+        {/* 开启注册 */}
+        <div>
+          <div className='flex items-center justify-between'>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              开启注册
+            </label>
+            <button
+              type='button'
+              onClick={() =>
+                setSiteSettings((prev) => ({
+                  ...prev,
+                  EnableRegistration: !prev.EnableRegistration,
+                }))
+              }
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+                siteSettings.EnableRegistration
+                  ? buttonStyles.toggleOn
+                  : buttonStyles.toggleOff
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full ${
+                  buttonStyles.toggleThumb
+                } transition-transform ${
+                  siteSettings.EnableRegistration
+                    ? buttonStyles.toggleThumbOn
+                    : buttonStyles.toggleThumbOff
+                }`}
+              />
+            </button>
+          </div>
+          <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+            开启后登录页面将显示注册按钮，允许用户自行注册账号。
+          </p>
+        </div>
+
+        {/* 注册启用Cloudflare Turnstile */}
+        <div>
+          <div className='flex items-center justify-between'>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              注册启用Cloudflare Turnstile
+            </label>
+            <button
+              type='button'
+              onClick={() =>
+                setSiteSettings((prev) => ({
+                  ...prev,
+                  RegistrationRequireTurnstile: !prev.RegistrationRequireTurnstile,
+                }))
+              }
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+                siteSettings.RegistrationRequireTurnstile
+                  ? buttonStyles.toggleOn
+                  : buttonStyles.toggleOff
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full ${
+                  buttonStyles.toggleThumb
+                } transition-transform ${
+                  siteSettings.RegistrationRequireTurnstile
+                    ? buttonStyles.toggleThumbOn
+                    : buttonStyles.toggleThumbOff
+                }`}
+              />
+            </button>
+          </div>
+          <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+            开启后注册时需要通过Cloudflare Turnstile人机验证。
+          </p>
+        </div>
+
+        {/* 登录启用Cloudflare Turnstile */}
+        <div>
+          <div className='flex items-center justify-between'>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              登录启用Cloudflare Turnstile
+            </label>
+            <button
+              type='button'
+              onClick={() =>
+                setSiteSettings((prev) => ({
+                  ...prev,
+                  LoginRequireTurnstile: !prev.LoginRequireTurnstile,
+                }))
+              }
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+                siteSettings.LoginRequireTurnstile
+                  ? buttonStyles.toggleOn
+                  : buttonStyles.toggleOff
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full ${
+                  buttonStyles.toggleThumb
+                } transition-transform ${
+                  siteSettings.LoginRequireTurnstile
+                    ? buttonStyles.toggleThumbOn
+                    : buttonStyles.toggleThumbOff
+                }`}
+              />
+            </button>
+          </div>
+          <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+            开启后登录时需要通过Cloudflare Turnstile人机验证。
+          </p>
+        </div>
+
+        {/* Cloudflare Turnstile Site Key */}
+        <div>
+          <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+            Cloudflare Turnstile Site Key
+          </label>
+          <input
+            type='text'
+            placeholder='请输入Cloudflare Turnstile Site Key'
+            value={siteSettings.TurnstileSiteKey || ''}
+            onChange={(e) =>
+              setSiteSettings((prev) => ({
+                ...prev,
+                TurnstileSiteKey: e.target.value,
+              }))
+            }
+            className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent'
+          />
+          <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+            在Cloudflare Dashboard中获取的Site Key（公钥）
+          </p>
+        </div>
+
+        {/* Cloudflare Turnstile Secret Key */}
+        <div>
+          <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+            Cloudflare Turnstile Secret Key
+          </label>
+          <input
+            type='password'
+            placeholder='请输入Cloudflare Turnstile Secret Key'
+            value={siteSettings.TurnstileSecretKey || ''}
+            onChange={(e) =>
+              setSiteSettings((prev) => ({
+                ...prev,
+                TurnstileSecretKey: e.target.value,
+              }))
+            }
+            className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent'
+          />
+          <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+            在Cloudflare Dashboard中获取的Secret Key（私钥），用于服务端验证
+          </p>
+        </div>
+
+        {/* 默认用户组 */}
+        <div>
+          <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+            默认用户组
+          </label>
+          <select
+            value={siteSettings.DefaultUserTags && siteSettings.DefaultUserTags.length > 0 ? siteSettings.DefaultUserTags[0] : ''}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSiteSettings((prev) => ({
+                ...prev,
+                DefaultUserTags: value ? [value] : [],
+              }));
+            }}
+            className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent'
+          >
+            <option value=''>无用户组（无限制）</option>
+            {config?.UserConfig?.Tags && config.UserConfig.Tags.map((tag) => (
+              <option key={tag.name} value={tag.name}>
+                {tag.name}
+                {tag.enabledApis && tag.enabledApis.length > 0
+                  ? ` (${tag.enabledApis.length} 个源)`
+                  : ''}
+              </option>
+            ))}
+          </select>
+          <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+            新注册的用户将自动分配到选中的用户组，选择"无用户组"为无限制
           </p>
         </div>
       </div>
