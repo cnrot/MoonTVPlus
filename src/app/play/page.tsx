@@ -2887,15 +2887,15 @@ function PlayPageClient() {
             lastLoadedEpisodeIdRef.current = episode.episodeId;
             await loadDanmaku(episode.episodeId);
             return; // 成功使用缓存，直接返回
+          } else {
+            console.warn('[弹幕] 缓存中没有找到匹配的剧集');
           }
+        } else {
+          console.warn('[弹幕] 获取剧集列表失败或列表为空');
         }
 
-        // 如果使用记忆加载失败（没有找到对应的剧集），清除该记忆并继续自动搜索
-        console.warn('[弹幕] 缓存中没有找到对应剧集，清除缓存并重新搜索');
-        if (artPlayerRef.current) {
-          artPlayerRef.current.notice.show = '缓存的弹幕源失效，正在重新搜索...';
-        }
-        // 清除失效的记忆
+        // 如果使用记忆加载失败（没有找到对应的剧集），清除该记忆
+        console.warn('[弹幕] 缓存失效，清除缓存');
         if (typeof window !== 'undefined') {
           try {
             const memoriesJson = localStorage.getItem('danmaku_memories');
@@ -2911,9 +2911,6 @@ function PlayPageClient() {
         }
       } catch (error) {
         console.error('[弹幕] 使用缓存加载失败:', error);
-        if (artPlayerRef.current) {
-          artPlayerRef.current.notice.show = '缓存的弹幕源失效，正在重新搜索...';
-        }
         // 清除失效的记忆
         if (typeof window !== 'undefined') {
           try {
@@ -2929,15 +2926,20 @@ function PlayPageClient() {
           }
         }
       }
-      // 如果缓存加载失败，继续执行后面的自动搜索逻辑
+      // 缓存失效，降级到搜索流程
+      console.log('[弹幕] 缓存已失效，降级到搜索流程');
+      if (artPlayerRef.current) {
+        artPlayerRef.current.notice.show = '缓存的弹幕源失效，正在重新搜索...';
+      }
+      // 注意：这里故意不return，继续执行下面的搜索流程
     }
 
-    // 自动搜索弹幕
+    // 没有缓存或缓存失效，执行自动搜索弹幕
     setDanmakuLoading(true);
 
-    // 优先使用保存的搜索关键词，否则使用视频标题
-    const searchKeyword = memory?.searchKeyword || title;
-    console.log('[弹幕] 搜索关键词:', searchKeyword, memory?.searchKeyword ? '(使用保存的关键词)' : '(使用视频标题)');
+    // 使用视频标题作为搜索关键词（缓存失效或不存在时）
+    const searchKeyword = title;
+    console.log('[弹幕] 搜索关键词:', searchKeyword, '(使用视频标题)');
 
     try {
       const searchResult = await searchAnime(searchKeyword);
