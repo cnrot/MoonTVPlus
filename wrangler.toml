@@ -9,5 +9,6 @@ main = ".open-next/worker.js"
 directory = ".open-next/assets"
 binding = "ASSETS"
 
-[env.production]
-# 生产环境变量可以在 Cloudflare Dashboard 配置
+[vars]
+NODE_ENV = "production"
+BUILD_TARGET = "cloudflare"
