@@ -73,6 +73,7 @@ import ProxyImage from '@/components/ProxyImage';
 import { useSite } from '@/components/SiteProvider';
 import SmartRecommendations from '@/components/SmartRecommendations';
 import Toast, { ToastProps } from '@/components/Toast';
+import VideoCard from '@/components/VideoCard';
 
 import { useDownload } from '@/contexts/DownloadContext';
 
@@ -89,6 +90,14 @@ interface WakeLockSentinel {
   release(): Promise<void>;
   addEventListener(type: 'release', listener: () => void): void;
   removeEventListener(type: 'release', listener: () => void): void;
+}
+
+interface PlayFallbackRecommendation {
+  key: string;
+  item: SearchResult;
+  episodes?: number;
+  sourceNames: string[];
+  doubanId?: number;
 }
 
 function PlayPageClient() {
@@ -1518,6 +1527,8 @@ function PlayPageClient() {
   const [sourceSearchError, setSourceSearchError] = useState<string | null>(
     null
   );
+  const [fallbackRecommendations, setFallbackRecommendations] = useState<PlayFallbackRecommendation[]>([]);
+  const [hasCompletedSearchRequest, setHasCompletedSearchRequest] = useState(false);
   const [backgroundSourcesLoading, setBackgroundSourcesLoading] = useState(false);
 
   // 优选和测速开关
@@ -3414,8 +3425,109 @@ function PlayPageClient() {
     };
 
 
+    const buildFallbackRecommendations = (items: SearchResult[], query: string): PlayFallbackRecommendation[] => {
+      const typedItems = searchType ? items.filter((item) => getType(item) === searchType) : items;
+      const preliminaryMap = new Map<string, SearchResult[]>();
+
+      typedItems.forEach((item) => {
+        const preliminaryKey = `${normalizeTitle(item.title).toLowerCase()}-${getType(item)}`;
+        const group = preliminaryMap.get(preliminaryKey) || [];
+        group.push(item);
+        preliminaryMap.set(preliminaryKey, group);
+      });
+
+      const finalRecommendations: PlayFallbackRecommendation[] = [];
+
+      preliminaryMap.forEach((group, preliminaryKey) => {
+        const withYear = new Map<string, SearchResult[]>();
+        const withoutYear: SearchResult[] = [];
+
+        group.forEach((item) => {
+          if (item.year && item.year.trim() !== '' && item.year !== 'unknown' && /^\d{4}$/.test(item.year)) {
+            const yearGroup = withYear.get(item.year) || [];
+            yearGroup.push(item);
+            withYear.set(item.year, yearGroup);
+          } else {
+            withoutYear.push(item);
+          }
+        });
+
+        const emitGroup = (groupKey: string, mergedGroup: SearchResult[]) => {
+          const sourceNames = Array.from(new Set(mergedGroup.map((item) => item.source_name).filter(Boolean)));
+          const episodeCountMap = new Map<number, number>();
+          const doubanCountMap = new Map<number, number>();
+
+          mergedGroup.forEach((item) => {
+            const episodeCount = item.episodes?.length || 0;
+            if (episodeCount > 0) {
+              episodeCountMap.set(episodeCount, (episodeCountMap.get(episodeCount) || 0) + 1);
+            }
+            if (item.douban_id && item.douban_id > 0) {
+              doubanCountMap.set(item.douban_id, (doubanCountMap.get(item.douban_id) || 0) + 1);
+            }
+          });
+
+          let episodes = 0;
+          let episodeVotes = 0;
+          episodeCountMap.forEach((votes, count) => {
+            if (votes > episodeVotes) {
+              episodeVotes = votes;
+              episodes = count;
+            }
+          });
+
+          let doubanId: number | undefined;
+          let doubanVotes = 0;
+          doubanCountMap.forEach((votes, id) => {
+            if (votes > doubanVotes) {
+              doubanVotes = votes;
+              doubanId = id;
+            }
+          });
+
+          const representative = mergedGroup.slice().sort((a, b) => {
+            const aPoster = a.poster ? 1 : 0;
+            const bPoster = b.poster ? 1 : 0;
+            if (bPoster !== aPoster) return bPoster - aPoster;
+            return (b.weight ?? 0) - (a.weight ?? 0);
+          })[0];
+
+          finalRecommendations.push({
+            key: groupKey,
+            item: representative,
+            episodes: episodes || undefined,
+            sourceNames,
+            doubanId,
+          });
+        };
+
+        if (withYear.size > 0) {
+          withYear.forEach((yearGroup, year) => {
+            emitGroup(`${preliminaryKey}-${year}`, [...yearGroup, ...withoutYear]);
+          });
+        } else if (withoutYear.length > 0) {
+          emitGroup(`${preliminaryKey}-unknown`, withoutYear);
+        }
+      });
+
+      const normalizedQuery = normalizeTitle(query).toLowerCase();
+
+      return finalRecommendations
+        .sort((a, b) => {
+          const aContains = normalizeTitle(a.item.title).toLowerCase().includes(normalizedQuery) ? 1 : 0;
+          const bContains = normalizeTitle(b.item.title).toLowerCase().includes(normalizedQuery) ? 1 : 0;
+          if (bContains !== aContains) return bContains - aContains;
+          if (b.sourceNames.length !== a.sourceNames.length) return b.sourceNames.length - a.sourceNames.length;
+          return (b.item.weight ?? 0) - (a.item.weight ?? 0);
+        })
+        .slice(0, 12);
+    };
+
     const fetchSourcesData = async (query: string): Promise<SearchResult[]> => {
       // 根据搜索词获取全部源信息
+      setHasCompletedSearchRequest(false);
+      setFallbackRecommendations([]);
+
       try {
         // 先检查 sessionStorage 中是否有缓存
         const cacheKey = `search_cache_${query.trim()}`;
@@ -3426,7 +3538,10 @@ function PlayPageClient() {
             const cached = sessionStorage.getItem(cacheKey);
             if (cached) {
               console.log('[Play] 使用 sessionStorage 缓存的搜索结果');
-              const cachedData = JSON.parse(cached);
+              const cachedData = JSON.parse(cached) as SearchResult[];
+
+              setHasCompletedSearchRequest(true);
+              setFallbackRecommendations(buildFallbackRecommendations(cachedData, query));
 
               // 处理缓存的搜索结果，根据规则过滤
               results = cachedData.filter(
@@ -3462,9 +3577,13 @@ function PlayPageClient() {
           throw new Error('搜索失败');
         }
         const data = await response.json();
+        const allResults = (data.results || []) as SearchResult[];
+
+        setHasCompletedSearchRequest(true);
+        setFallbackRecommendations(buildFallbackRecommendations(allResults, query));
 
         // 处理搜索结果，根据规则过滤
-        results = data.results.filter(
+        results = allResults.filter(
           (result: SearchResult) =>
             normalizeTitle(result.title).toLowerCase() ===
             normalizeTitle(videoTitleRef.current).toLowerCase() &&
@@ -7918,70 +8037,106 @@ function PlayPageClient() {
   if (error) {
     return (
       <PageLayout activePath='/play' hideNavigation={isWebFullscreen}>
-        <div className='flex items-center justify-center min-h-screen bg-transparent'>
-          <div className='text-center max-w-md mx-auto px-6'>
-            {/* 错误图标 */}
-            <div className='relative mb-8'>
-              <div className='relative mx-auto w-24 h-24 bg-gradient-to-r from-red-500 to-orange-500 rounded-2xl shadow-2xl flex items-center justify-center transform hover:scale-105 transition-transform duration-300'>
-                <div className='text-white text-4xl'>😵</div>
-                {/* 脉冲效果 */}
-                <div className='absolute -inset-2 bg-gradient-to-r from-red-500 to-orange-500 rounded-2xl opacity-20 animate-pulse'></div>
+        <div className='flex min-h-screen w-full items-center justify-center overflow-x-hidden bg-transparent px-4 py-6'>
+          <div className='flex w-full flex-col items-center'>
+            <div className='w-full max-w-md text-center'>
+              {/* 错误图标 */}
+              <div className='relative mb-8'>
+                <div className='relative mx-auto flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-r from-red-500 to-orange-500 shadow-2xl transition-transform duration-300 hover:scale-105'>
+                  <div className='text-4xl text-white'>😵</div>
+                  {/* 脉冲效果 */}
+                  <div className='absolute -inset-2 animate-pulse rounded-2xl bg-gradient-to-r from-red-500 to-orange-500 opacity-20'></div>
+                </div>
+
+                {/* 浮动错误粒子 */}
+                <div className='pointer-events-none absolute left-0 top-0 h-full w-full'>
+                  <div className='absolute left-2 top-2 h-2 w-2 animate-bounce rounded-full bg-red-400'></div>
+                  <div
+                    className='absolute right-4 top-4 h-1.5 w-1.5 animate-bounce rounded-full bg-orange-400'
+                    style={{ animationDelay: '0.5s' }}
+                  ></div>
+                  <div
+                    className='absolute bottom-3 left-6 h-1 w-1 animate-bounce rounded-full bg-yellow-400'
+                    style={{ animationDelay: '1s' }}
+                  ></div>
+                </div>
               </div>
 
-              {/* 浮动错误粒子 */}
-              <div className='absolute top-0 left-0 w-full h-full pointer-events-none'>
-                <div className='absolute top-2 left-2 w-2 h-2 bg-red-400 rounded-full animate-bounce'></div>
-                <div
-                  className='absolute top-4 right-4 w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce'
-                  style={{ animationDelay: '0.5s' }}
-                ></div>
-                <div
-                  className='absolute bottom-3 left-6 w-1 h-1 bg-yellow-400 rounded-full animate-bounce'
-                  style={{ animationDelay: '1s' }}
-                ></div>
-              </div>
-            </div>
-
-            {/* 错误信息 */}
-            <div className='space-y-4 mb-8'>
-              <h2 className='text-2xl font-bold text-gray-800 dark:text-gray-200'>
-                哎呀，出现了一些问题
-              </h2>
-              <div className='bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4'>
-                <p className='text-red-600 dark:text-red-400 font-medium'>
-                  {error}
+              {/* 错误信息 */}
+              <div className='mb-8 space-y-4'>
+                <h2 className='text-2xl font-bold text-gray-800 dark:text-gray-200'>
+                  哎呀，出现了一些问题
+                </h2>
+                <div className='rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20'>
+                  <p className='font-medium text-red-600 dark:text-red-400'>
+                    {error}
+                  </p>
+                </div>
+                <p className='text-sm text-gray-500 dark:text-gray-400'>
+                  请检查网络连接或尝试刷新页面
                 </p>
               </div>
-              <p className='text-sm text-gray-500 dark:text-gray-400'>
-                请检查网络连接或尝试刷新页面
-              </p>
+
+              {/* 操作按钮 */}
+              <div className='space-y-3'>
+                <button
+                  onClick={() =>
+                    videoTitle
+                      ? router.push(`/search?q=${encodeURIComponent(videoTitle)}`)
+                      : router.back()
+                  }
+                  className='w-full rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-3 font-medium text-white shadow-lg transition-all duration-200 hover:scale-105 hover:from-green-600 hover:to-emerald-700 hover:shadow-xl'
+                >
+                  {videoTitle ? '🔍 返回搜索' : '← 返回上页'}
+                </button>
+
+                <button
+                  onClick={() => window.location.reload()}
+                  className='w-full rounded-xl bg-gray-100 px-6 py-3 font-medium text-gray-700 transition-colors duration-200 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                >
+                  🔄 重新尝试
+                </button>
+              </div>
             </div>
 
-            {/* 操作按钮 */}
-            <div className='space-y-3'>
-              <button
-                onClick={() =>
-                  videoTitle
-                    ? router.push(`/search?q=${encodeURIComponent(videoTitle)}`)
-                    : router.back()
-                }
-                className='w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:from-green-600 hover:to-emerald-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl'
-              >
-                {videoTitle ? '🔍 返回搜索' : '← 返回上页'}
-              </button>
-
-              <button
-                onClick={() => window.location.reload()}
-                className='w-full px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200'
-              >
-                🔄 重新尝试
-              </button>
-            </div>
+            {hasCompletedSearchRequest && fallbackRecommendations.length > 0 && (
+              <div className='mt-4 w-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-gray-200 bg-white/70 p-3 text-left dark:border-gray-700 dark:bg-gray-800/70 sm:max-w-3xl lg:max-w-5xl'>
+                <div className='mb-3 flex items-center gap-2'>
+                  <Sparkles className='h-4 w-4 flex-shrink-0 text-amber-500' />
+                  <h3 className='text-sm font-semibold text-gray-800 dark:text-gray-200'>
+                    也许你想看
+                  </h3>
+                </div>
+                <div className='w-full overflow-x-auto overflow-y-hidden pb-1'>
+                  <div className='inline-flex gap-2.5 sm:gap-3'>
+                    {fallbackRecommendations.map((recommendation) => (
+                      <div
+                        key={recommendation.key}
+                        className='w-[118px] min-w-[118px] flex-shrink-0 sm:w-[150px] sm:min-w-[150px]'
+                      >
+                        <VideoCard
+                          title={recommendation.item.title}
+                          query={searchTitle || videoTitle}
+                          poster={recommendation.item.poster}
+                          episodes={recommendation.episodes}
+                          source_names={recommendation.sourceNames}
+                          year={recommendation.item.year}
+                          douban_id={recommendation.doubanId}
+                          from='search'
+                          isAggregate
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </PageLayout>
     );
   }
+
 
   return (
     <PageLayout activePath='/play' hideNavigation={isWebFullscreen}>
